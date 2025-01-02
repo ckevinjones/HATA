@@ -1,0 +1,70 @@
+# Update all ACCESS TOKENS WITH REFRESH TOKENS EVERYDAY
+
+import requests
+import pandas as pd
+import logging
+from datetime import datetime
+
+# Set up logging
+logging.basicConfig(level=logging.INFO, filename='logAccessToken.log', filemode='w')
+logger = logging.getLogger(__name__)
+
+# CSV file PATH
+path = "AppCreds.csv"
+
+# Read the CSV file into a DataFrame
+df = pd.read_csv(path, index_col=0)
+
+# Loop through each row in the DataFrame
+for index, row in df.iterrows():
+    location_id = index
+    app_key_id = row['app_key_id']
+    app_key_secret = row['app_key_secret']
+    access_token = row['access_token']
+    refresh_token = row['refresh_token']
+
+    url = "https://services.leadconnectorhq.com/oauth/token"
+
+    payload = {
+        "client_id": app_key_id,
+        "client_secret": app_key_secret,
+        "grant_type": "refresh_token",
+        "refresh_token": refresh_token,
+        "user_type": "Location",
+    }
+
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json"
+    }
+
+    try:
+        response = requests.post(url, data=payload, headers=headers)
+        response.raise_for_status()
+        print("response", response)
+        data = response.json()
+        access_token = data["access_token"]
+        refresh_token = data["refresh_token"]
+        logger.info("Access Token for Location ID %s: %s", location_id, access_token)
+        logger.info("Refresh Token for Location ID %s: %s", location_id, refresh_token)
+        logger.info("Response for Location ID %s: %s", location_id, response.json())
+        print("access_token:", access_token)
+        print("location_id:", location_id)
+        print("refresh_token:", refresh_token)
+        print(response.json())
+
+        # Update the credentials in the DataFrame
+        df.loc[index, 'access_token'] = access_token
+        df.loc[index, 'refresh_token'] = refresh_token
+        df.loc[index, 'last_updated'] = datetime.now()  # Add the current date and time
+
+    except requests.exceptions.RequestException as e:
+        logger.error("Error for Location ID %s: %s", location_id, e)
+        if response is not None:
+            logger.error("Response status code for Location ID %s: %s", location_id, response.status_code)
+            logger.error("Response body for Location ID %s: %s", location_id, response.text)
+            print(f"Response status code: {response.status_code}")
+            print(f"Response body: {response.text}")
+# Write the updated DataFrame back to the CSV file
+df.to_csv(path)
+
